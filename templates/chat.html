@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat in your bhasha</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <div id="chat-messages" class="chat-messages">
+            <!-- Messages will be loaded here by JavaScript or pre-rendered -->
+            {% for msg in messages %}
+                <div class="message message-{{ msg.type }}">
+                    <strong>{{ msg.sender }}:</strong>
+                    {{ msg.content }}
+                    {% if msg.type == 'audio' and msg.path %}
+                        <br><audio controls src="{{ url_for('uploads', path=msg.filename) }}"></audio>
+                    {% elif msg.type == 'file' and msg.filename %}
+                        <br><a href="{{ url_for('uploads', path=msg.filename) }}" target="_blank">Download {{ msg.filename }}</a>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="chat-input-area">
+            <input type="file" id="file-upload-input" style="display: none;" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt,.zip">
+            <button id="upload-btn" class="icon-btn" title="Attach File">📎</button>
+
+            <input type="text" id="message-input" placeholder="Type a message...">
+
+            <button id="record-btn" class="icon-btn" title="Record Audio">🎤</button> <!-- Initial Icon -->
+            <button id="send-btn"  > 
+                Send
+            </button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='/script.js') }}"></script>
+</body>
+</html>
