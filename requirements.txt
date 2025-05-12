@@ -1,0 +1,8 @@
+google-adk
+google-api-python-client
+langchain_community
+tavily-python
+google-genai
+python-multipart
+jinja2
+sarvamai

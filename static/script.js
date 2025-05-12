@@ -56,6 +56,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             addMessageToChat('System', 'Processing', 'system');
             isProcessing = true
+            sendBtn.setAttribute("disabled","true");
+            uploadBtn.setAttribute("disabled","true");
+            recordBtn.setAttribute("disabled", "true")
             
             const response = await fetch('/send_message/', {
                 method: 'POST',
@@ -64,9 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const result = await response.json()
             isProcessing = false
+            
+
             addMessageToChat('Agent',result.message,'text')
             addMessageToChat('Agent', `Answer:  ${result.filename}`, 'audio', 
                 { path: result.path, filename: result.filename });
+            sendBtn.removeAttribute("disabled");
+            uploadBtn.removeAttribute("disabled");
+            recordBtn.removeAttribute("disabled")
+
+            //addMessageToChat('Agent', ``, 'audio', 
+            //    { path: result.path, filename: result.filename });                
             //addMessageToChat('You', `Answer: ${result.filename}`, 'audio', { path: result.path, filename: result.filename });
             // if (!response.ok) {
             //     const result = await response.json().catch(() => ({ status: 'Server error' }));
@@ -117,11 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             if (response.ok) {
-                if (existingMsg) {
-                    existingMsg.innerHTML = `<strong>You:</strong> Uploaded: ${result.filename} <br><a href="/uploads/${result.filename}" target="_blank">Download ${result.filename}</a>`;
-                } else { // Fallback
+                //if (existingMsg) {
+                //    existingMsg.innerHTML = `<strong>You:</strong> Uploaded: ${result.filename} <br><a href="/uploads/${result.filename}" target="_blank">Download ${result.filename}</a>`;
+                //} else { // Fallback
                     addMessageToChat('You', `Uploaded: ${result.filename}`, 'file', { filename: result.filename });
-                }
+                //}
             } else {
                  if (existingMsg) {
                     existingMsg.innerHTML = `<strong>System:</strong> Error uploading ${file.name}: ${result.error || result.status}`;
@@ -181,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/wav' });
                     audioChunks = [];
 
-                    addMessageToChat('System', 'Sending audio...', 'system');
+                    //addMessageToChat('System', 'Sending audio...', 'system');
 
                     const formData = new FormData();
                     const fileExtension = (mediaRecorder.mimeType || 'audio/wav').split('/')[1].split(';')[0];
@@ -195,7 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const result = await response.json();
                         console.log('Server response (audio):', result);
                         if (response.ok) {
-                            addMessageToChat('You', `Recorded audio: ${result.filename}`, 'audio', { path: result.path, filename: result.filename });
+                            //addMessageToChat('You', `Recorded audio: ${result.filename}`, 'audio', { path: result.path, filename: result.filename });
+                            addMessageToChat('You', ``, 'audio', { path: result.path, filename: result.filename });
 
                             // //invoke agent with audiofile
                             // const formData = new FormData();
@@ -236,10 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 mediaRecorder.start();
                 isRecording = true;
+                messageInput.value=""
+                messageInput.disabled = true;
+                sendBtn.setAttribute("disabled","true");
+                uploadBtn.setAttribute("disabled","true");
                 recordBtn.classList.add('recording');
                 recordBtn.title = "Stop Recording";
                 recordBtn.textContent = "◼️"; // Stop icon
-                addMessageToChat('System', 'Recording started...', 'system');
+                //addMessageToChat('System', 'Recording started...', 'system');
 
             } catch (err) {
                 console.error('Error accessing microphone:', err);
@@ -260,6 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Stream tracks are stopped inside the 'stop' event listener after processing
             }
             isRecording = false;
+            messageInput.disabled = false;
+            sendBtn.removeAttribute("disabled");
+            uploadBtn.removeAttribute("disabled");
+
             recordBtn.classList.remove('recording');
             recordBtn.title = "Record Audio";
             recordBtn.textContent = "🎤"; // Mic icon

@@ -7,9 +7,10 @@ import shutil
 import uvicorn
 import datetime # For unique filenames
 import os       # For getting file extension
+from contextlib import asynccontextmanager
 from bhasha_chat_agent.agent import call_agent
 
-app = FastAPI()
+
 
 # --- Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -17,6 +18,17 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)  # Create uploads directory if it doesn't exist
 TEMP_DIR = BASE_DIR / "temp"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)  # Create temp directory if it doesn't exist
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    # code to execute when app is loading
+    print("loading app")
+    yield
+    # code to execute when app is shutting down
+    print("closing")
+    clear_files()
+    
+app = FastAPI(lifespan=app_lifespan)    
 
 # Mount static files (CSS, JS)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -148,6 +160,31 @@ async def handle_upload_audio(request: Request, audio: UploadFile = File(...)):
     finally:
         if audio and hasattr(audio, 'file') and not audio.file.closed:
             audio.file.close()
+
+def clear_files( ):
+    print("clearing")
+    # Clear the contents of the upload directory
+    for filename in os.listdir(TEMP_DIR):
+        file_path = os.path.join(TEMP_DIR, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f"Failed to delete {file_path}. Reason: {e}")
+
+    for filename in os.listdir(UPLOAD_DIR):
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f"Failed to delete {file_path}. Reason: {e}")            
+
+
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from google.adk.runners import Runner
 from google.adk.events import Event
 from google.adk.agents import Agent
 from google.adk.tools import ToolContext, FunctionTool
+from google.adk.planners import BuiltInPlanner
 from google.genai import types
 from typing import Any, List, Optional
 import json
@@ -40,7 +41,6 @@ import mimetypes
 import io
 import requests
 
-#from playsound import playsound
 import mimetypes
 import os
 import threading
@@ -52,45 +52,38 @@ from . import constants
 from . import prompt
 
 import tempfile
+from sarvamai import SarvamAI
+from sarvamai.play import play, save
  
-temp_dir = tempfile.mkdtemp()
+# importing module
+import logging
+
+# Create and configure logger
+logging.basicConfig(filename="newfile.log",
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+
+# Creating an object
+logger = logging.getLogger()
 
 load_dotenv()
 
 # --- Constants ---
-APP_NAME = "code_pipeline_app"
-USER_ID = "dev_user_01"
-SESSION_ID = "pipeline_session_01"
-GEMINI_MODEL = "gemini-2.5-flash-preview-04-17" #"gemini-2.5-pro-exp-03-25" "gemini-2.0-flash"
-INDIAN_LANG_CODES = ['en','hi','bn','gu','kn','ml','mr','od','pa','ta','te']
+
 # TEMP_DIR = Path(constants.TEMP_FOLDER) 
 # TEMP_DIR.mkdir(exist_ok=True)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-TEMP_DIR = os.path.join(BASE_DIR, "temp")
-
-out_wav_filename = os.path.join(TEMP_DIR, constants.OUTPUT_WAVEFILE)
+#TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
 api_key = os.environ['SARVAM_API_KEY']
 
-# #input schema for the tool
+# #input schema for the translate_and_speak_tool
+  
 class InfoAnswer(BaseModel):
     language: str = Field(description="The language in which the user asked the query")
     retreived_answer: str = Field(description="Answer obtained by querying the document")
     
-class InfoResponse(BaseModel):
-    text: str = Field(description="The text response to be returned to the user")
-    audio_file: str = Field(description="The audio response file to be returned to the user")
-
-@contextlib.contextmanager
-def wave_file(filename, channels=1, rate= 8000, #24000
-               sample_width=2):
-    with wave.open(filename, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sample_width)
-        wf.setframerate(rate)
-        yield wf
-
 def parse_adk_output_to_dictionary(events: list[Event]) -> dict[str, Any]:
     """
     Parse ADK event output into a structured dictionary format,
@@ -121,6 +114,7 @@ def parse_adk_output_to_dictionary(events: list[Event]) -> dict[str, Any]:
             if event.content.role == "model" and part.text:
                 # Overwrite response; the last text response found is likely the final one
                 final_response = part.text.strip()
+                
 
     # Dump the collected trajectory list into a JSON string
     final_output = {
@@ -150,50 +144,8 @@ def format_output_as_markdown(output: dict) -> str:
 def get_lang_code(language:str):
     if len(language) == 2:
         return language
-    lang_code = {
-        "english": "en",
-        "hindi": "hi",
-        "tamil": "ta",
-        "telugu": "te",
-        "kannada": "kn",
-        "malayalam": "ml",
-        "marathi": "mr",
-        "punjabi": "pa",
-        "bengali": "bn",
-        "gujarati": "gu",
-        "odia": "or",
-        "urdu": "ur",
-        "assamese": "as",
-        "maithili": "mai",
-        "sanskrit": "sa",
-        "sindhi": "sd",
-        "nepali": "ne",
-        "french": "fr",
-        "german": "de",
-        "greek": "el",
-        "gujarati": "gu",
-        "japanese": "ja",
-        "korean": "ko",
-        "marathi": "mr",
-        "russian": "ru",
-        "tamil": "ta",
-        "telugu": "te",
-        "urdu": "ur",
-        "vietnamese": "vi",
-        "chinese": "zh",
-        "hindi": "hi",
-        "bengali": "bn",
-        "gujarati": "gu",
-        "kannada": "kn",
-        "malayalam": "ml",
-        "marathi": "mr",
-        "odia": "or",
-        "punjabi": "pa",
-        "tamil": "ta",
-        "telugu": "te",
-        "urdu": "ur"
-    }
-    return lang_code.get(language.lower())
+    
+    return constants.ALL_LANG_CODES.get(language.lower())
 
 #helper function
 def get_translation(text, language):
@@ -201,39 +153,33 @@ def get_translation(text, language):
     Translate the text to the given language
     Returns: translated text
     """
+    client = SarvamAI(api_subscription_key=api_key)    
+
     target_lang_code = get_lang_code(language)
-    if target_lang_code not in INDIAN_LANG_CODES:
+    if target_lang_code not in constants.INDIAN_LANG_CODES:
         translated_text="User has asked question in a language which is not supported."
         target_lang_code = "en-IN"
     else:
         target_lang_code = target_lang_code + "-IN"
         if target_lang_code != "en-IN":
             # if target is not english then translate
-            url = "https://api.sarvam.ai/translate"
 
-            payload = {
-                "input": text,
-                "source_language_code": "en-IN",
-                "target_language_code": target_lang_code,
-                "speaker_gender": "Female",
-                "mode": "formal",
-                "model": "mayura:v1",
-                "enable_preprocessing": False,
-                "output_script": "spoken-form-in-native",
-                "numerals_format": "international"
-            }
-            headers = {"Content-Type": "application/json",
-                    'api-subscription-key': api_key
-                        }
-
-            response = requests.request("POST", url, json=payload, headers=headers)
-            translated_text = response.json()["translated_text"]
+            response = client.text.translate(
+                    input=text,
+                    source_language_code="en-IN",
+                    target_language_code=target_lang_code,
+                    speaker_gender="Male",
+                    mode="classic-colloquial",
+                    model="mayura:v1",
+                    enable_preprocessing=False,
+                )
+            translated_text = response.translated_text
         else:
             translated_text = text
 
     return translated_text, target_lang_code
 
-def get_audio_answer(filename: str, tool_context:ToolContext):
+def get_audio_answer():
     ans="dummy"
     return ans
 
@@ -242,51 +188,18 @@ def speak(text, lang_code):
     Converts text to speech
     Returns: wav file path
     """
-    import requests
- 
 
-    #Convert the answer to speech
-    #Use SARVAM API
-    
-    url = "https://api.sarvam.ai/text-to-speech"
+    client = SarvamAI(api_subscription_key=api_key)    
 
-    payload = {
-    "inputs": [text],
-    "speaker": "meera",
-    "pitch": 0,
-    "pace": 1.25,
-    "loudness": 2,
-    "speech_sample_rate": 8000,
-    "enable_preprocessing": True,
-    "model": "bulbul:v1",
-    "target_language_code": lang_code
-    }
-    headers = {
-        'api-subscription-key': api_key,
-        "Content-Type": "application/json"}
-
-    response = requests.request("POST", url, json=payload, headers=headers)
-    response.raise_for_status()
-    print("Request successful")
-
-    audio_data = response.json()['audios']
-    delimiter = ""
-    audio_string = delimiter.join(audio_data)
-
-
-        
+    response = client.text_to_speech.convert( inputs=[text],
+        target_language_code=lang_code, speaker="anushka", enable_preprocessing=True,
+    )
     temp = tempfile.NamedTemporaryFile(suffix='.wav',dir="temp", delete=False,delete_on_close=False)
-    #print(temp.name)
+    filename=temp.name
+    save(response, filename)
+    return filename
 
-    with wave_file(temp.name) as wav:
-        audio_bytes = base64.b64decode(audio_string)
-        wav.writeframes(audio_bytes)
-
-    #threading.Thread(target=playsound, args=(out_wav_filename,)).start()
-    #print("Speaking ..")
-    #playsound(out_wav_filename)
-    return temp.name
-
+ 
 # Tool function
 def translate_and_speak(a_dict: InfoAnswer, tool_context:ToolContext) :
     """
@@ -304,11 +217,10 @@ def translate_and_speak(a_dict: InfoAnswer, tool_context:ToolContext) :
 
 # Instantiate the LangChain tool
 tavily_tool_instance = TavilySearchResults(
-    max_results=5,
+    max_results=1,
     search_depth="basic",
-    include_answer=True,
-    include_raw_content=True,
-    include_images=True,
+    #return_direct=True
+    
 )
 
 # Wrap it with LangchainTool for ADK
@@ -336,14 +248,14 @@ safety_settings = [
     ),
 ]
 
-generate_content_config = types.GenerateContentConfig(
-   #safety_settings=safety_settings,
-   #temperature=0.28,
-   #max_output_tokens=500,
-   #top_p=0.95,
-   
+# generate_content_config = types.GenerateContentConfig(
+#    #safety_settings=safety_settings,
+#    #temperature=0.28,
+#    #max_output_tokens=500,
+#    #top_p=0.95,
+#    thinking_config=types.ThinkingConfig(thinking_budget=0)
   
-)
+# )
 
 def after_tool_modifier(
     tool: BaseTool, args: Dict[str, Any], tool_context: ToolContext, tool_response: Dict
@@ -356,36 +268,43 @@ def after_tool_modifier(
     if tool_name == "translate_and_speak":
         
         original_result_value = tool_response
-    # original_result_value = tool_response
-
-    # --- Modification Example ---
-    # If the tool was 'get_capital_city' and result is 'Washington, D.C.'
-   
+ 
         print(f"[Callback] tool response : {original_result_value}")   
         tool_context.state['audio_filename'] = original_result_value.get('audio_answer')
         print(f"Saving state audio_filename: {tool_context.state['audio_filename']}")
-    # Return the modified dictionary
-
-        #print("[Callback] Passing original tool response through.")
-    # Return None to use the original tool_response
+        # Return the modified dictionary
+        #modified_response = original_result_value.get('translated_answer')
+        #return modified_response
         return None
+
+        
     if tool_name == "get_audio_answer":
         original_result_value = tool_response
         print(f"[Callback] tool response : {original_result_value}")   
         modified_response = tool_context.state['audio_filename']
+        print(f"[Callback] Modified tool response : {modified_response}")
         return modified_response
+
 
 
 bhasha_chat_agent = Agent(
     name="bhasha_chat_agent",
-    model=GEMINI_MODEL,
+    model=constants.GEMINI_MODEL,
     description=(
         "Agent to transcribe audio to text and perform content retreival and answer in the language used by user"
     ),
     #generate_content_config=generate_content_config,
+    
     tools=[adk_tavily_tool, translate_and_speak_tool,get_audio_answer_tool],
     instruction=prompt.ROOT_PROMPT,
     after_tool_callback=after_tool_modifier,
+    #generate_content_config=generate_content_config
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(
+            include_thoughts=False,
+            thinking_budget=1024,
+        )
+    ),
     
      
     
@@ -393,8 +312,9 @@ bhasha_chat_agent = Agent(
 
 # Session and Runner
 session_service = InMemorySessionService()
-session = session_service.create_session(app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID)
-runner = Runner(agent=bhasha_chat_agent, app_name=APP_NAME, session_service=session_service)
+session = session_service.create_session(app_name=constants.APP_NAME, 
+                                         user_id=constants.USER_ID, session_id=constants.SESSION_ID)
+runner = Runner(agent=bhasha_chat_agent, app_name=constants.APP_NAME, session_service=session_service)
 
 root_agent = bhasha_chat_agent
 
@@ -434,7 +354,7 @@ async def call_agent(data_file, query_file, user_prompt=""):
         
     #events = runner.run(user_id=USER_ID, session_id=SESSION_ID, new_message=content)
     events = list(
-        runner.run(user_id=USER_ID, session_id=SESSION_ID, new_message=content)
+        runner.run(user_id=constants.USER_ID, session_id=constants.SESSION_ID, new_message=content)
     )
     #response = parse_adk_output_to_dictionary(events)
     #print( format_output_as_markdown(response))
@@ -450,6 +370,7 @@ async def call_agent(data_file, query_file, user_prompt=""):
                 
                 text_answer = final_response[0]
                 audio_answer = final_response[1]
+                
                 
     return audio_answer, text_answer
 
